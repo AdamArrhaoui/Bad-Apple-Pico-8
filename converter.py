@@ -11,7 +11,7 @@ from p8scii import NumToP8Converter
 # FFMPEG THRESH COMMAND: ffmpeg -i bad_apple_orig.mp4 -f lavfi -i color=gray -f lavfi -i color=black -f lavfi -i color=white -lavfi threshold threshv2.mp4
 
 FPS = 30
-TARGET_RESOLUTION = (64, 48)
+TARGET_RESOLUTION = (32, 24)
 
 IN_PATH = os.path.join(os.path.dirname(__file__), "bad_apple_orig.mp4")
 OUT_PATH = os.path.join(os.path.dirname(__file__), "small_apple_v2.mp4")
@@ -29,7 +29,7 @@ def main():
     #START FRAME FOR 30FPS: 46 end 6515
     #START FRAME FOR 24FPS: 36 end 5213
     #end frame for 24fps: 1400
-    frame_bytes, header_bytes, rle_bytes = encode_video_p8(os.path.join(os.path.dirname(__file__), "retimed.mp4"), start_frame=4, end_frame=6428, show_frame_num=55, merge_header=False, wtiles=TARGET_RESOLUTION[0]//4, htiles=TARGET_RESOLUTION[1]//4)#2336
+    frame_bytes, header_bytes, rle_bytes = encode_video_p8(os.path.join(os.path.dirname(__file__), "retimed.mp4"), start_frame=4, end_frame=6428, show_frame_num=-55, merge_header=False, wtiles=TARGET_RESOLUTION[0]//4, htiles=TARGET_RESOLUTION[1]//4)#2336
 
     combined_bytes = header_bytes + frame_bytes
     print(f"\nUncompressed vid length: {len(frame_bytes)}")
@@ -148,12 +148,12 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
             total_empty_frames += 1
 
             p8_header_nums.extend([255] * htiles)
-            frame_header_chars = head_to_p8(255) * htiles
+            # frame_header_chars = head_to_p8(255) * htiles
 
-            p8_header_chars.append(frame_header_chars)
+            # p8_header_chars.append(frame_header_chars)
 
             if merge_header: 
-                p8_frame_chars.append(frame_header_chars)
+                # p8_frame_chars.append(frame_header_chars)
                 p8_frame_nums.extend([255] * htiles)
 
         else:
@@ -161,22 +161,22 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
             p8_frame = encode_p8_str(diff_img, wtiles, htiles)
 
             p8_header_nums.extend(p8_frame[0])
-            frame_header_chars = "".join(head_to_p8(num) for num in p8_frame[0])
-            p8_header_chars.append(frame_header_chars)
-            if merge_header:
-                p8_frame_str += frame_header_chars
+            # frame_header_chars = "".join(head_to_p8(num) for num in p8_frame[0])
+            # p8_header_chars.append(frame_header_chars)
+            # if merge_header:
+            #     p8_frame_str += frame_header_chars
             # Loop over processed tiles
             for i in range(1, len(p8_frame)):
                 tile = p8_frame[i]
                 # Each tile is 2 8 bit numbers.
-                upper_tile_char = tile_to_p8(tile[0])
-                lower_tile_char = tile_to_p8(tile[1])
-                p8_frame_str += upper_tile_char + lower_tile_char
+                # upper_tile_char = tile_to_p8(tile[0])
+                # lower_tile_char = tile_to_p8(tile[1])
+                # p8_frame_str += upper_tile_char + lower_tile_char
                 p8_frame_nums.extend(tile)
             total_empty_tiles += num_empty_tiles
             min_empty_tiles = min(min_empty_tiles, num_empty_tiles)
 
-        p8_frame_chars.append(p8_frame_str)
+        # p8_frame_chars.append(p8_frame_str)
 
         diff_rle = encode_frame_RLE(diff_img)
         p8_rle_nums.extend(diff_rle)
@@ -212,16 +212,16 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
         prev_img = img.copy()
         success,img = img_from_cap(capture)
 
-    p8_frames_as_str = "".join(p8_frame_chars)
-    p8_headers_as_str = "".join(p8_header_chars)
+    # p8_frames_as_str = "".join(p8_frame_chars)
+    # p8_headers_as_str = "".join(p8_header_chars)
     p8_frames_as_bytes = bytes(p8_frame_nums)
     p8_headers_as_bytes = bytes(p8_header_nums)
 
     num_frames = frame_num - start_frame
     print(f"Total Frames: {num_frames}")
     print(f"Total Tiles: {(num_frames - total_empty_frames) * 48 - total_empty_tiles}")
-    print(f"Num Header Characters: {len(p8_headers_as_str)}")
-    print(f"Num Characters: {len(p8_frames_as_str)}")
+    print(f"Num Header Characters: {len(p8_headers_as_bytes)}")
+    print(f"Num Characters: {len(p8_frames_as_bytes)}")
     print(f"Total empty frames: {total_empty_frames}/{num_frames} frames")
     print(f"Average empty tiles: {total_empty_tiles / (frame_num - start_frame - total_empty_frames)} per non-empty frame")
     print(f"Estimated num characters @ 3 chars/tile + 1 char/frame: {(frame_num - start_frame - total_empty_frames) * 48 - total_empty_tiles}")
