@@ -5,7 +5,7 @@ import warnings
 import cv2
 import numpy as np
 import zlib
-
+from bitarray import bitarray, util as butil
 from p8scii import NumToP8Converter
 
 # FFMPEG THRESH COMMAND: ffmpeg -i bad_apple_orig.mp4 -f lavfi -i color=gray -f lavfi -i color=black -f lavfi -i color=white -lavfi threshold threshv2.mp4
@@ -113,7 +113,7 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
     p8_frame_nums = []
     p8_header_nums = []
 
-    p8_rle_nums = []
+    p8_rle_bits = bitarray()
     total_empty_tiles = 0
     min_empty_tiles = 1000
     total_empty_frames = 0
@@ -179,10 +179,9 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
         # p8_frame_chars.append(p8_frame_str)
 
         diff_rle = encode_frame_RLE(diff_img)
-        p8_rle_nums.extend(diff_rle)
+        p8_rle_bits += diff_rle
 
         if frame_num == show_frame_num:
-            diff_rle = encode_frame_RLE(diff_img)
             print(f"diff RLE encoded (length {len(diff_rle)}): {diff_rle}")
             # img_rle = encode_frame_RLE(img, True)
             # print(f"Image RLE encoded (length {len(img_rle)}): {img_rle}")
@@ -226,7 +225,7 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
     print(f"Average empty tiles: {total_empty_tiles / (frame_num - start_frame - total_empty_frames)} per non-empty frame")
     print(f"Estimated num characters @ 3 chars/tile + 1 char/frame: {(frame_num - start_frame - total_empty_frames) * 48 - total_empty_tiles}")
 
-    return p8_frames_as_bytes, p8_headers_as_bytes, bytes(p8_rle_nums)
+    return p8_frames_as_bytes, p8_headers_as_bytes, p8_rle_bits.tobytes()
         
 
 def encode_p8_str(image, wtiles : int = 8, htiles : int = 6, invert: bool = True):
@@ -279,21 +278,35 @@ def encode_p8_str(image, wtiles : int = 8, htiles : int = 6, invert: bool = True
 
 
 def encode_frame_RLE(image, invert: bool = False):
+    """Encodes an image with Run-Length Encoding. 
+
+    Each RLE value is either 8 or 12 bits long.
+
+    Each segment consists Number of skipped pixels in 1+7 bits, 
+    followed number of flipped pixels in 4 bits.
+
+    If the number of flipped pixels is 1, flip most significant bit of skipped pixels 
+    and don't write number of flipped pixels
+    
+    Returns bitarray"""
+
     pixel_array = np.trim_zeros(image.flatten(), 'b')
 
+    rle_values = bitarray()
+    
     max_skip = 127
-    max_flip = 255
-    rle_values = []
-    curr_skip = np.uint8(0)
-    curr_flip = np.uint8(0)
+    max_flip = 15
+    curr_skip = 0
+    curr_flip = 0
+    num_skip_flips = 0
     is_skipping = True
 
-    skip_col = 0
+    skip_color = 0
     if invert:
-        skip_col = 255
+        skip_color = 255
+    
+    # TODO case where frame is empty
 
-    gap_found = False
-    initial_gap = 0
     for pixel in pixel_array:
         # if not gap_found:
         #     if pixel == 0:
@@ -301,34 +314,41 @@ def encode_frame_RLE(image, invert: bool = False):
         #     else:
         #         gap_found = True
         # if gap_found:
-            
+        
+        # Start counting skipped pixels first
         if is_skipping:
-            if pixel == skip_col and curr_skip < max_skip:
+            if pixel == skip_color and curr_skip < max_skip:
                 curr_skip += 1
             else:
                 curr_flip = 0
                 is_skipping = False
+        # Count number of flipped pixels
         if not is_skipping:
-            if pixel != skip_col:
+            if pixel != skip_color:
                 if(curr_flip < max_flip):
                     curr_flip += 1
                     continue
+            # If pixel == skip_color, statement below is run
             if(curr_flip == 1):
                 # If we only flip 1 tile, set greatest bit of curr_skip to 1 and add only curr_skip to output
-                rle_values.append(curr_skip | 0b10000000)
+                rle_values += butil.int2ba(curr_skip | 0b10000000, length=8, signed=False)
+                num_skip_flips += 1
             else:
-                rle_values.extend((curr_skip, curr_flip))
+                rle_values += butil.int2ba(curr_skip, length=8, signed=False) + butil.int2ba(curr_flip, length=4, signed=False)
+                num_skip_flips += 1
             curr_skip = 1
             curr_flip = 0
             is_skipping = True
     
     if not is_skipping:
-        rle_values.extend((curr_skip, curr_flip))
+        rle_values += butil.int2ba(curr_skip, length=8, signed=False) + butil.int2ba(curr_flip, length=4, signed=False)
+        num_skip_flips += 1
     else:
         # TODO loop backwards through list and remove empty skips if they exist
         pass
     #rle_values.extend([np.uint8(0)] * 2)
-    rle_values.insert(0, np.uint8(len(rle_values)))
+    #add number of skip flip values in this frame to the beginning of the frame.
+    rle_values = butil.int2ba(num_skip_flips, length=8, signed=False) + rle_values
     return rle_values
 
 
