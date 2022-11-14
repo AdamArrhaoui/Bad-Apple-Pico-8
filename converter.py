@@ -218,12 +218,12 @@ def encode_video_p8(video_path, start_frame = 1, end_frame = -1, show_frame_num 
 
     num_frames = frame_num - start_frame
     print(f"Total Frames: {num_frames}")
-    print(f"Total Tiles: {(num_frames - total_empty_frames) * 48 - total_empty_tiles}")
+    print(f"Total Tiles: {(num_frames - total_empty_frames) * wtiles * htiles - total_empty_tiles}")
     print(f"Num Header Characters: {len(p8_headers_as_bytes)}")
     print(f"Num Characters: {len(p8_frames_as_bytes)}")
     print(f"Total empty frames: {total_empty_frames}/{num_frames} frames")
     print(f"Average empty tiles: {total_empty_tiles / (frame_num - start_frame - total_empty_frames)} per non-empty frame")
-    print(f"Estimated num characters @ 3 chars/tile + 1 char/frame: {(frame_num - start_frame - total_empty_frames) * 48 - total_empty_tiles}")
+    print(f"Estimated num characters @ 3 chars/tile + 1 char/frame: {(frame_num - start_frame - total_empty_frames) * wtiles * htiles - total_empty_tiles}")
 
     return p8_frames_as_bytes, p8_headers_as_bytes, p8_rle_bits.tobytes()
         
